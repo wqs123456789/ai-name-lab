@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>起名斋 · 多模型 AI 起名</title>
+<meta name="description" content="多模型 AI 起名平台，流式输出名字与寓意，历史记录存于 Supabase。" />
+<style>
+  :root {
+    --paper: #faf7f2;
+    --paper-2: #ffffff;
+    --ink: #1f1c18;
+    --ink-soft: #453f38;
+    --muted: #857b70;
+    --line: #e7dfd4;
+    --seal: #b23b32;
+    --seal-soft: #f7ece9;
+    --jade: #2f6b5f;
+    --shadow: 0 1px 2px rgba(31, 28, 24, .04), 0 8px 24px rgba(31, 28, 24, .06);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { height: 100%; }
+
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1200px 600px at 15% -10%, #fffdf9 0%, rgba(255, 253, 249, 0) 60%),
+      radial-gradient(900px 500px at 110% 10%, #f6f1e8 0%, rgba(246, 241, 232, 0) 55%),
+      var(--paper);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .serif {
+    font-family: "Songti SC", "STSong", "SimSun", "Noto Serif SC", Georgia, serif;
+  }
+
+  /* ---------- 顶栏 ---------- */
+  header {
+    border-bottom: 1px solid var(--line);
+    background: rgba(250, 247, 242, .82);
+    backdrop-filter: blur(8px);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+
+  .bar {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .seal {
+    width: 38px; height: 38px;
+    border-radius: 6px;
+    background: var(--seal);
+    color: #fff;
+    display: grid;
+    place-items: center;
+    font-size: 19px;
+    letter-spacing: 0;
+    font-family: "Songti SC", "SimSun", serif;
+    box-shadow: 0 2px 8px rgba(178, 59, 50, .28);
+    flex: none;
+  }
+
+  .brand { display: flex; flex-direction: column; line-height: 1.25; }
+  .brand b { font-size: 17px; letter-spacing: .12em; font-weight: 600; }
+  .brand span { font-size: 11px; color: var(--muted); letter-spacing: .18em; }
+
+  .bar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); }
+
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: #bdb4a8; display: inline-block; }
+  .dot.on { background: var(--jade); box-shadow: 0 0 0 3px rgba(47, 107, 95, .12); }
+
+  /* ---------- 布局 ---------- */
+  main {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 28px 24px 64px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 26px;
+    align-items: start;
+  }
+
+  .card {
+    background: var(--paper-2);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+  }
+
+  /* ---------- 输入区 ---------- */
+  .compose { padding: 22px 22px 18px; }
+
+  .label {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 12px;
+    letter-spacing: .14em;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .label em { font-style: normal; color: var(--seal); }
+
+  textarea {
+    width: 100%;
+    min-height: 92px;
+    resize: vertical;
+    padding: 13px 14px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fffdfa;
+    color: var(--ink);
+    font: inherit;
+    line-height: 1.65;
+    outline: none;
+    transition: border-color .18s, box-shadow .18s;
+  }
+  textarea::placeholder { color: #b3a99c; }
+  textarea:focus { border-color: #d3c3b0; box-shadow: 0 0 0 3px rgba(178, 59, 50, .07); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; margin: 10px 0 16px; }
+
+  .chip {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: #fffdfa;
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: all .15s;
+    user-select: none;
+  }
+  .chip:hover { border-color: #d8c8b5; background: var(--seal-soft); color: var(--seal); }
+
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+  select {
+    appearance: none;
+    padding: 10px 34px 10px 13px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fffdfa url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2.5 4.5L6 8l3.5-3.5' fill='none' stroke='%23857b70' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/></svg>") no-repeat right 12px center;
+    color: var(--ink);
+    font: inherit;
+    font-size: 14px;
+    cursor: pointer;
+    outline: none;
+    min-width: 200px;
+  }
+  select:focus { border-color: #d3c3b0; }
+
+  button {
+    font: inherit;
+    cursor: pointer;
+    border: none;
+    border-radius: 10px;
+    transition: transform .12s, background .18s, opacity .18s;
+  }
+  button:active { transform: translateY(1px); }
+
+  .btn-primary {
+    padding: 11px 22px;
+    background: var(--ink);
+    color: #fdfaf5;
+    font-size: 14px;
+    letter-spacing: .06em;
+    box-shadow: 0 4px 14px rgba(31, 28, 24, .16);
+  }
+  .btn-primary:hover { background: #33302a; }
+  .btn-primary:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+
+  .btn-ghost {
+    padding: 10px 16px;
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--ink-soft);
+    font-size: 13px;
+  }
+  .btn-ghost:hover { background: #f7f2ea; }
+  .btn-ghost:disabled { opacity: .5; cursor: not-allowed; }
+
+  .hint { font-size: 12px; color: var(--muted); margin-left: auto; }
+
+  /* ---------- 结果区 ---------- */
+  .result { margin-top: 18px; padding: 0; overflow: hidden; }
+
+  .result-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 13px 18px;
+    border-bottom: 1px solid var(--line);
+    background: #fffdfa;
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: .1em;
+  }
+  .result-head .tag {
+    padding: 2px 8px;
+    border-radius: 5px;
+    background: var(--seal-soft);
+    color: var(--seal);
+    letter-spacing: .04em;
+  }
+  .result-head .spacer { margin-left: auto; }
+  .result-head button { padding: 5px 10px; font-size: 12px; background: transparent; border: 1px solid var(--line); color: var(--muted); border-radius: 7px; }
+  .result-head button:hover { color: var(--ink); border-color: #d8c8b5; }
+
+  .output {
+    padding: 22px 24px 28px;
+    min-height: 240px;
+    font-size: 15.5px;
+    color: var(--ink-soft);
+  }
+
+  .placeholder {
+    height: 200px;
+    display: grid;
+    place-items: center;
+    text-align: center;
+    color: #b3a99c;
+    font-size: 13px;
+    letter-spacing: .1em;
+    line-height: 2;
+  }
+  .placeholder .big { font-size: 34px; color: #e6dccd; display: block; margin-bottom: 6px; }
+
+  /* 流式光标 */
+  .cursor {
+    display: inline-block;
+    width: 2px; height: 1.05em;
+    background: var(--seal);
+    vertical-align: -2px;
+    margin-left: 2px;
+    animation: blink 1s steps(2, start) infinite;
+  }
+  @keyframes blink { to { visibility: hidden; } }
+
+  /* Markdown 排版 */
+  .md h2, .md h3 {
+    font-family: "Songti SC", "STSong", "SimSun", "Noto Serif SC", Georgia, serif;
+    font-size: 19px;
+    font-weight: 600;
+    color: var(--ink);
+    margin: 26px 0 10px;
+    padding-left: 12px;
+    border-left: 3px solid var(--seal);
+    letter-spacing: .04em;
+  }
+  .md h2:first-child, .md h3:first-child { margin-top: 0; }
+  .md p { margin: 0 0 10px; }
+  .md strong { color: var(--ink); font-weight: 600; }
+  .md blockquote {
+    margin: 16px 0 4px;
+    padding: 10px 14px;
+    background: #f8f4ec;
+    border-radius: 8px;
+    color: #6d6459;
+    font-size: 13.5px;
+    border-left: 3px solid #e2d5c2;
+  }
+  .md ul { margin: 6px 0 12px; padding-left: 20px; }
+  .md li { margin: 3px 0; }
+  .md code { background: #f4efe6; padding: 1px 5px; border-radius: 4px; font-size: .9em; }
+
+  .banner {
+    margin-top: 12px;
+    padding: 10px 14px;
+    border-radius: 9px;
+    font-size: 13px;
+    display: none;
+  }
+  .banner.show { display: block; }
+  .banner.warn { background: #fdf6e8; color: #8a6116; border: 1px solid #f0e0bf; }
+  .banner.error { background: var(--seal-soft); color: #9a2f27; border: 1px solid #f0d2cd; }
+
+  /* ---------- 侧栏 ---------- */
+  aside { display: grid; gap: 16px; }
+
+  .side-card { padding: 16px 16px 8px; }
+  .side-title {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; letter-spacing: .14em; color: var(--muted);
+    margin-bottom: 12px;
+  }
+  .side-title b { color: var(--ink); font-weight: 600; letter-spacing: .06em; font-size: 13px; }
+  .side-title .count { margin-left: auto; font-size: 11px; }
+
+  .history { list-style: none; margin: 0; padding: 0; max-height: 460px; overflow-y: auto; }
+  .history li {
+    padding: 11px 0;
+    border-top: 1px dashed var(--line);
+    cursor: pointer;
+  }
+  .history li:first-child { border-top: none; }
+  .history li:hover .hist-req { color: var(--seal); }
+  .hist-req { font-size: 13.5px; color: var(--ink); line-height: 1.5; transition: color .15s; }
+  .hist-meta { margin-top: 4px; font-size: 11px; color: var(--muted); display: flex; gap: 8px; }
+  .hist-meta .m { color: var(--jade); }
+
+  .empty { padding: 18px 0 22px; font-size: 12.5px; color: #b3a99c; text-align: center; line-height: 1.9; }
+
+  .steps { list-style: none; margin: 0 0 8px; padding: 0; font-size: 12.5px; color: var(--muted); }
+  .steps li { padding: 6px 0 6px 22px; position: relative; line-height: 1.6; }
+  .steps li::before {
+    content: counter(step);
+    counter-increment: step;
+    position: absolute; left: 0; top: 7px;
+    width: 15px; height: 15px; border-radius: 50%;
+    background: #f2ece2; color: #9a9084;
+    font-size: 10px; display: grid; place-items: center;
+  }
+  .steps { counter-reset: step; }
+
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; gap: 18px; padding: 18px 14px 48px; }
+    .bar { padding: 12px 16px; }
+    aside { order: 2; }
+    .compose { padding: 16px; }
+    .output { padding: 18px; }
+    .hint { margin-left: 0; width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="bar">
+    <div class="seal serif">名</div>
+    <div class="brand">
+      <b class="serif">起名斋</b>
+      <span>AI NAMING STUDIO</span>
+    </div>
+    <div class="bar-right">
+      <span class="dot" id="dbDot"></span>
+      <span id="dbText">检查中…</span>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section>
+    <div class="card compose">
+      <div class="label">起名需求 <em>*</em></div>
+      <textarea id="req" maxlength="500" placeholder="例如：男孩，国风，两字，希望有山水的意境，忌用生僻字"></textarea>
+
+      <div class="chips" id="chips">
+        <span class="chip">男孩</span>
+        <span class="chip">女孩</span>
+        <span class="chip">中性</span>
+        <span class="chip">国风</span>
+        <span class="chip">简约</span>
+        <span class="chip">两字</span>
+        <span class="chip">三字</span>
+        <span class="chip">出自诗经</span>
+        <span class="chip">忌生僻字</span>
+        <span class="chip">五行缺水</span>
+      </div>
+
+      <div class="row">
+        <select id="model" aria-label="选择模型">
+          <option value="doubao">豆包 · 火山方舟</option>
+        </select>
+        <button class="btn-primary" id="go">开始起名</button>
+        <button class="btn-ghost" id="stop" disabled>停止</button>
+        <span class="hint" id="hint">流式输出 · 结果自动存入 Supabase</span>
+      </div>
+
+      <div class="banner" id="banner"></div>
+    </div>
+
+    <div class="card result">
+      <div class="result-head">
+        <span>生成结果</span>
+        <span class="tag" id="tagModel">—</span>
+        <span class="spacer"></span>
+        <span id="tagStat"></span>
+        <button id="copy" style="margin-left:8px;">复制</button>
+      </div>
+      <div class="output" id="output">
+        <div class="placeholder">
+          <div>
+            <span class="big serif">名</span>
+            写下你的期望，三组名字与寓意<br />会一个字一个字地浮现出来
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <aside>
+    <div class="card side-card">
+      <div class="side-title"><b>历史记录</b><span class="count" id="hCount"></span></div>
+      <ul class="history" id="history">
+        <div class="empty">暂无记录</div>
+      </ul>
+    </div>
+
+    <div class="card side-card" style="padding-bottom:14px;">
+      <div class="side-title"><b>实验对照</b></div>
+      <ol class="steps">
+        <li>下拉框切换 4 家模型，代码只有一份</li>
+        <li>上游 SSE 手动解析，逐段转发前端</li>
+        <li>密钥全部来自环境变量</li>
+        <li>结果落库 Supabase，刷新不丢</li>
+      </ol>
+    </div>
+  </aside>
+</main>
+
+<script>
+/* ========== 状态 ========== */
+const state = {
+  controller: null,
+  raw: '',
+  startedAt: 0,
+  models: []
+};
+
+const $ = (id) => document.getElementById(id);
+const reqEl = $('req'), modelEl = $('model'), outEl = $('output');
+const goBtn = $('go'), stopBtn = $('stop'), banner = $('banner');
+
+/* ========== 小工具 ========== */
+function showBanner(type, text) {
+  banner.className = 'banner show ' + type;
+  banner.textContent = text;
+}
+function hideBanner() { banner.className = 'banner'; }
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+/* 极简 Markdown 渲染：够用就好，支持 ## 标题、**粗体**、> 引用、列表、`代码` */
+function renderMarkdown(text) {
+  const lines = escapeHtml(text).split('\n');
+  let html = '';
+  let inList = false;
+
+  const inline = (s) => s
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+?)`/g, '<code>$1</code>')
+    .replace(/^[\s]*[-*]\s+/, '');
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    const isLi = /^\s*[-*]\s+/.test(line);
+    const isOl = /^\s*\d+[.、]\s+/.test(line);
+
+    if (inList && !isLi && !isOl) { html += '</ul>'; inList = false; }
+
+    if (!line.trim()) { html += ''; continue; }
+
+    if (/^###\s+/.test(line)) html += `<h3>${inline(line.replace(/^###\s+/, ''))}</h3>`;
+    else if (/^##\s+/.test(line)) html += `<h2>${inline(line.replace(/^##\s+/, ''))}</h2>`;
+    else if (/^#\s+/.test(line)) html += `<h2>${inline(line.replace(/^#\s+/, ''))}</h2>`;
+    else if (/^>\s?/.test(line)) html += `<blockquote>${inline(line.replace(/^>\s?/, ''))}</blockquote>`;
+    else if (isLi || isOl) {
+      if (!inList) { html += '<ul>'; inList = true; }
+      html += `<li>${inline(line)}</li>`;
+    } else html += `<p>${inline(line)}</p>`;
+  }
+  if (inList) html += '</ul>';
+  return html;
+}
+
+/* ========== 模型清单 ========== */
+async function loadModels() {
+  try {
+    const res = await fetch('/api/name');
+    if (!res.ok) throw new Error('接口无响应');
+    const data = await res.json();
+    state.models = data.models || [];
+    modelEl.innerHTML = state.models
+      .map((m) => `<option value="${m.key}" ${m.key === 'doubao' ? 'selected' : ''}>${m.label}${m.configured ? '' : '（未配置密钥）'}</option>`)
+      .join('');
+    const ready = state.models.filter((m) => m.configured).length;
+    $('dbText').textContent = `可用模型 ${ready}/${state.models.length}`;
+    $('dbDot').className = 'dot' + (ready ? ' on' : '');
+  } catch (e) {
+    $('dbText').textContent = '模型清单加载失败';
+  }
+}
+
+/* ========== 历史记录 ========== */
+async function loadHistory() {
+  const ul = $('history');
+  try {
+    const res = await fetch('/api/history?limit=20');
+    const data = await res.json();
+    const items = data.items || [];
+    $('hCount').textContent = items.length ? items.length + ' 条' : '';
+    if (!items.length) {
+      ul.innerHTML = '<div class="empty">暂无记录<br />生成一次后就会出现</div>';
+      return;
+    }
+    ul.innerHTML = items.map((it) => {
+      const t = new Date(it.createdAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+      const modelKey = String(it.model || '').split(':')[0];
+      const label = (state.models.find((m) => m.key === modelKey) || {}).label || modelKey || '未知';
+      return `<li data-req="${escapeHtml(it.requirement)}">
+        <div class="hist-req">${escapeHtml(it.requirement)}</div>
+        <div class="hist-meta"><span class="m">${escapeHtml(label)}</span><span>${t}</span><span>#${it.id}</span></div>
+      </li>`;
+    }).join('');
+    ul.querySelectorAll('li[data-req]').forEach((li) => {
+      li.addEventListener('click', () => {
+        reqEl.value = li.dataset.req;
+        reqEl.focus();
+      });
+    });
+  } catch {
+    ul.innerHTML = '<div class="empty">历史记录加载失败</div>';
+  }
+}
+
+/* ========== 起名（SSE 解析） ========== */
+function setRunning(on) {
+  goBtn.disabled = on;
+  stopBtn.disabled = !on;
+  goBtn.textContent = on ? '生成中…' : '开始起名';
+}
+
+function updateStat(chars) {
+  const sec = ((Date.now() - state.startedAt) / 1000).toFixed(1);
+  $('tagStat').textContent = `${chars} 字 · ${sec}s`;
+}
+
+function renderStreaming() {
+  outEl.innerHTML = `<div class="md">${renderMarkdown(state.raw)}<span class="cursor"></span></div>`;
+  // 只在用户本来就贴着底部时才跟随，避免打断向上回看
+  const nearBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 220;
+  if (nearBottom) window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+}
+
+async function generate() {
+  const requirement = reqEl.value.trim();
+  if (!requirement) { showBanner('error', '请先写一句起名需求'); reqEl.focus(); return; }
+
+  hideBanner();
+  state.raw = '';
+  state.startedAt = Date.now();
+  state.controller = new AbortController();
+  setRunning(true);
+
+  const model = modelEl.value;
+  const label = modelEl.options[modelEl.selectedIndex].textContent;
+  $('tagModel').textContent = label;
+  $('tagStat').textContent = '';
+  outEl.innerHTML = '<div class="md"><span class="cursor"></span></div>';
+
+  let firstByte = true;
+
+  try {
+    const res = await fetch('/api/name', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requirement, model }),
+      signal: state.controller.signal
+    });
+
+    // 非 200 一般是 JSON 错误（比如参数校验失败）
+    if (!res.ok) {
+      let msg = `请求失败（${res.status}）`;
+      try { const j = await res.json(); if (j.error) msg = j.error; } catch {}
+      throw new Error(msg);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (firstByte) { firstByte = false; }
+
+      buffer += decoder.decode(value, { stream: true });
+
+      let idx;
+      while ((idx = buffer.indexOf('\n\n')) !== -1) {
+        const chunk = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 2);
+
+        for (const line of chunk.split('\n')) {
+          if (!line.startsWith('data:')) continue;
+          const payload = line.slice(5).trim();
+          if (!payload || payload === '[DONE]') continue;
+
+          let evt;
+          try { evt = JSON.parse(payload); } catch { continue; }
+
+          if (evt.type === 'delta') {
+            state.raw += evt.text;
+            renderStreaming();
+            updateStat(state.raw.length);
+          } else if (evt.type === 'warn') {
+            showBanner('warn', evt.message);
+          } else if (evt.type === 'error') {
+            throw new Error(evt.message);
+          } else if (evt.type === 'done') {
+            updateStat(state.raw.length);
+            if (evt.id) {
+              $('hint').textContent = `已保存到 Supabase（记录 #${evt.id}）`;
+            }
+          }
+        }
+      }
+    }
+
+    if (!state.raw.trim()) throw new Error('模型没有返回内容，请检查密钥或模型名是否正确');
+    outEl.innerHTML = `<div class="md">${renderMarkdown(state.raw)}</div>`;
+    loadHistory();
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      outEl.innerHTML = `<div class="md">${renderMarkdown(state.raw || '_已停止生成_')}</div>`;
+      showBanner('warn', '已停止生成，已生成的部分保留在页面上');
+    } else {
+      outEl.innerHTML = `<div class="md">${renderMarkdown(state.raw)}</div>`;
+      showBanner('error', err.message || '生成失败');
+    }
+  } finally {
+    setRunning(false);
+    state.controller = null;
+  }
+}
+
+/* ========== 事件绑定 ========== */
+goBtn.addEventListener('click', generate);
+
+stopBtn.addEventListener('click', () => {
+  if (state.controller) state.controller.abort();
+});
+
+$('copy').addEventListener('click', async () => {
+  const text = state.raw.trim();
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    const btn = $('copy');
+    const old = btn.textContent;
+    btn.textContent = '已复制';
+    setTimeout(() => (btn.textContent = old), 1400);
+  } catch {
+    showBanner('error', '复制失败，请手动选中文本');
+  }
+});
+
+$('chips').addEventListener('click', (e) => {
+  const chip = e.target.closest('.chip');
+  if (!chip) return;
+  const word = chip.textContent;
+  const cur = reqEl.value.trim();
+  if (cur.includes(word)) return;
+  reqEl.value = cur ? `${cur.replace(/[，,]\s*$/, '')}，${word}` : word;
+  reqEl.focus();
+});
+
+reqEl.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') generate();
+});
+
+/* ========== 初始化 ========== */
+loadModels().then(loadHistory);
+</script>
+</body>
+</html>
